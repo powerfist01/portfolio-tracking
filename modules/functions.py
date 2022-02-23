@@ -152,6 +152,9 @@ def get_cumulative_returns():
     '''
     portfolio = get_portfolio()
 
+    if(not portfolio):
+        return -1
+
     cumulative_return = 0
     for item in portfolio:
         current_quantity = item[1]

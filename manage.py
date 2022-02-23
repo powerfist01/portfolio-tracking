@@ -1,26 +1,15 @@
 from flask import (
     Flask, request
 )
-from flask_restplus import Api, Resource, fields
 
 from modules import functions
 
 app = Flask(__name__)
 
-api_app = Api(app = app)
+@app.route('/')
+def home():
 
-name_space = api_app.namespace('', description='Main APIs')
-
-@name_space.route("/")
-class Class(Resource):
-	def get(self):
-		return {
-			"status": "Got new data"
-		}
-	def post(self):
-		return {
-			"status": "Posted new data"
-		}
+  return '<b>server is running!</b><br><br>Documentation: <br> 1. <b>GET /</b> Home page <br>2.<b> GET /portfolio</b> Get my portfolio <br>3. <b>POST /trade </b>To perform a trade <br>4. <b>GET /transactions </b>To get all the transactions in the portfolio <br> 5.<b> GET/returns </b>To get the cumulative returns'
 
 @app.route('/trade', methods=['POST'])
 def trade():
@@ -37,7 +26,7 @@ def trade():
     else:
       return {'success': False, 'message': 'Total shares cannot be negative.'}
 
-@app.route('/')
+@app.route('/portfolio')
 def portfolio():
 
   my_portfolio = functions.get_portfolio()
