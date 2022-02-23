@@ -1,6 +1,6 @@
 import os
-import hashlib
 
+current_price = 100
 
 def get_database_connection():
     '''
@@ -25,73 +25,14 @@ def create_sqlite_tables(conn):
     conn.commit()
 
 
-def get_user_count():
+def insert_into_portfolio(ticker, total_shares, average_price):
     '''
-        Checks whether a user exists with the specified username and password
-    '''
-    conn = get_database_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM users')
-        result = cursor.fetchone()
-        if result:
-            return result[0]
-    except:
-        return False
-
-
-def check_user_exists(username, password):
-    '''
-        Checks whether a user exists with the specified username and password
+        To insert ticker into portfolio
     '''
     conn = get_database_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE username=? AND password=?', (username, password))
-        result = cursor.fetchone()
-        if result:
-            return result[0]
-    except:
-        return False
-
-
-def store_last_login(user_id):
-    '''
-        Checks whether a user exists with the specified username and password
-    '''
-    conn = get_database_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET last_login=(strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')) WHERE id=?", (user_id, ))
-        conn.commit()
-        cursor.close()
-    except:
-        cursor.close()
-
-
-def check_username(username):
-    '''
-        Checks whether a username is already taken or not
-    '''
-    conn = get_database_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE username=?', (username, ))
-        if cursor.fetchone():
-            return True
-    except:
-        return False
-
-
-def signup_user(username, password, email):
-    '''
-        Function for storing the details of a user into the database
-        while registering
-    '''
-    conn = get_database_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO users(username, password, email) VALUES (?, ?, ?)", (username, password, email))
+        cursor.execute("INSERT INTO portfolio(ticker, shares, average_price) VALUES (?, ?, ?)", (ticker, total_shares, average_price))
         conn.commit()
         cursor.close()
         return
@@ -99,14 +40,14 @@ def signup_user(username, password, email):
         cursor.close()
 
 
-def get_user_data(user_id):
+def get_portfolio():
     '''
-        Function for getting the data of a specific user using his user_id
+        To get all the tickers from portfolio
     '''
     conn = get_database_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE id=?', (str(user_id), ))
+        cursor.execute('SELECT ticker, shares, average_price FROM portfolio where shares != 0')
         results = cursor.fetchall()
         cursor.close()
         if len(results) == 0:
@@ -115,15 +56,58 @@ def get_user_data(user_id):
     except:
         cursor.close()
 
-
-def get_data_using_user_id(id):
+def get_ticker_from_portfolio(ticker):
     '''
-        Function for getting the data of all notes using user_id
+        To get ticker from portfolio
     '''
     conn = get_database_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM notes WHERE user_id=' + str(id))
+        cursor.execute('SELECT * FROM portfolio where ticker=?', (ticker,))
+        results = cursor.fetchone()
+        cursor.close()
+        if len(results) == 0:
+            return None
+        return results
+    except:
+        cursor.close()
+
+def update_portfolio(ticker, total_shares, average_price):
+    '''
+        To update the portfolio
+    '''
+    conn = get_database_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE portfolio SET shares=?, average_price=? WHERE ticker=?", (total_shares, average_price, ticker))
+        conn.commit()
+        cursor.close()
+        return
+    except:
+        cursor.close()
+
+
+def add_new_transactions(ticker, shares, trade):
+    '''
+        To add a new transaction
+    '''
+    conn = get_database_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO transactions(ticker, shares, trade) VALUES (?, ?, ?)", (ticker, shares, trade))
+        conn.commit()
+        cursor.close()
+    except:
+        cursor.close()
+
+def get_transactions_for_ticker(ticker):
+    '''
+        To get transactions by tickername
+    '''
+    conn = get_database_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute('SELECT ticker, shares, trade, created_at FROM transactions where ticker=? order by created_at desc', (ticker,))
         results = cursor.fetchall()
         cursor.close()
         if len(results) == 0:
@@ -132,78 +116,47 @@ def get_data_using_user_id(id):
     except:
         cursor.close()
 
+def create_trade(trade, ticker, shares):
+    '''
+        To create a trade
+    '''
+    ticker_from_portfolio = get_ticker_from_portfolio(ticker)
+    if(ticker_from_portfolio):
 
-def get_data_using_id(id):
-    '''
-        Function for retrieving data of a specific note using its id
-    '''
-    conn = get_database_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM notes WHERE id=' + str(id))
-        results = cursor.fetchall()
-        cursor.close()
-        return results
-    except:
-        cursor.close()
+        previous_shares = ticker_from_portfolio[2]
+        average_price = ticker_from_portfolio[3]
 
+        if(trade == 'BUY'):
+            total_shares = previous_shares + shares
+            average_price = ((previous_shares * average_price) + (shares * current_price)) / total_shares
+            update_portfolio(ticker, total_shares, average_price)
+            add_new_transactions(ticker, shares, trade)
+        else:
 
-def get_number_of_notes(id):
-    '''
-        Function for retrieving number of notes stored by a specific user
-    '''
-    conn = get_database_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(note) FROM notes WHERE user_id=' + str(id))
-        results = cursor.fetchone()[0]
-        cursor.close()
-        return results
-    except:
-        cursor.close()
+            if(previous_shares < shares):
+                return False
+            
+            total_shares = previous_shares - shares
+            update_portfolio(ticker, total_shares, average_price)
+            add_new_transactions(ticker, shares, trade)
+    else:
+        average_price = shares * current_price / shares
+        insert_into_portfolio(ticker, shares, average_price)
+        add_new_transactions(ticker, shares, trade)
 
+    return True
 
-def get_data():
+def get_cumulative_returns():
     '''
-        Function for getting data of all notes
+        To calculate the cumulative returns on the portfolio
     '''
-    conn = get_database_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM notes')
-        results = cursor.fetchall()
-        cursor.close()
-        return results
-    except:
-        cursor.close()
+    portfolio = get_portfolio()
 
+    cumulative_return = 0
+    for item in portfolio:
+        current_quantity = item[1]
+        average_price = item[2]
 
-def add_note(note_title, note, note_markdown, tags, user_id):
-    '''
-        Function for adding note into the database
-    '''
-    conn = get_database_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO notes(note_title, note, note_markdown, tags, user_id) VALUES (?, ?, ?, ?, ?)", (note_title, note, note_markdown, tags, user_id))
-        conn.commit()
-        cursor.close()
-        return
-    except:
-        cursor.close()
+        cumulative_return += (current_price - average_price) * current_quantity
 
-
-def edit_note(note_title, note, note_markdown, tags, note_id):
-    '''
-        Function for adding note into the database
-    '''
-    conn = get_database_connection()
-    try:
-        cursor = conn.cursor()
-        # print("UPDATE notes SET note_title=?, note=?, note_markdown=?, tags=? WHERE id=?", (note_title, note, note_markdown, tags, note_id))
-        cursor.execute("UPDATE notes SET note_title=?, note=?, note_markdown=?, tags=? WHERE id=?", (note_title, note, note_markdown, tags, note_id))
-        conn.commit()
-        cursor.close()
-        return
-    except:
-        cursor.close()
+    return cumulative_return
